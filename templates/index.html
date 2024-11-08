@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Entry System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Add Toggle Switch CSS -->
+    <style>
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 120px;
+            height: 34px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #4CAF50;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "IN";
+            height: 26px;
+            width: 56px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 34px;
+            text-align: center;
+            line-height: 26px;
+        }
+        input:checked + .toggle-slider {
+            background-color: #f44336;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(56px);
+            content: "OUT";
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8">Automated Entry System</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Camera Feed Section -->
+            <div class="bg-white rounded-lg shadow-lg p-4">
+                <h2 class="text-2xl font-semibold mb-4">Camera Feed</h2>
+                
+                <!-- Camera Configuration -->
+                <div class="mb-4">
+                    <div class="flex space-x-2">
+                        <input type="text" id="cameraUrl" 
+                               class="flex-1 border rounded-lg px-4 py-2"
+                               placeholder="IP Camera URL (e.g., http://192.168.1.100:8080/video)"
+                               value="{{ camera_url }}">
+                        <button id="updateCamera" 
+                                class="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600">
+                            Update URL
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Current URL: <span id="currentUrl">{{ camera_url }}</span>
+                    </p>
+                </div>
+                
+                <div class="relative">
+                    <img id="video_feed" src="" alt="Camera Feed" class="w-full rounded-lg">
+                    <div class="mt-4 space-y-4">
+                        <!-- IN/OUT Toggle Switch -->
+                        <div class="flex items-center justify-center space-x-4">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="entryTypeToggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        
+                        <!-- Control Buttons -->
+                        <div class="flex space-x-4">
+                            <button id="startCamera" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">
+                                Start Camera
+                            </button>
+                            <button id="stopCamera" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
+                                Stop Camera
+                            </button>
+                            <button id="capturePlate" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                                Capture Plate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Database Entries Section -->
+            <div class="bg-white rounded-lg shadow-lg p-4">
+                <h2 class="text-2xl font-semibold mb-4">Recent Entries</h2>
+                <div id="entries" class="space-y-4">
+                    <!-- Entries will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            let isStreamingActive = false;
+
+            function startStreaming() {
+                if (!isStreamingActive) {
+                    $('#video_feed').attr('src', '/video_feed');
+                    isStreamingActive = true;
+                }
+            }
+
+            function stopStreaming() {
+                if (isStreamingActive) {
+                    $('#video_feed').attr('src', '');
+                    isStreamingActive = false;
+                }
+            }
+
+            function deleteEntry(id) {
+                if (confirm('Are you sure you want to delete this entry?')) {
+                    $.ajax({
+                        url: '/delete_entry',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ id: id }),
+                        success: function(response) {
+                            if (response.status === 'success') {
+                                updateEntries();
+                            } else {
+                                alert('Failed to delete entry');
+                            }
+                        }
+                    });
+                }
+            }
+
+            function updateEntries() {
+                $.get('/get_entries', function(data) {
+                    const entriesDiv = $('#entries');
+                    entriesDiv.empty();
+                    
+                    data.entries.reverse().forEach(entry => {
+                        const entryTypeClass = entry['Entry Type'] === 'IN' ? 'text-green-600' : 'text-red-600';
+                        entriesDiv.append(`
+                            <div class="bg-gray-50 p-4 rounded-lg flex justify-between items-center">
+                                <div>
+                                    <p class="font-semibold">${entry['Plate Number']}</p>
+                                    <p class="text-sm text-gray-600">
+                                        ${entry['Date']} at ${entry['Time']}
+                                    </p>
+                                    <p class="font-medium ${entryTypeClass}">
+                                        ${entry['Entry Type']}
+                                    </p>
+                                </div>
+                                <button onclick="deleteEntry('${entry['ID']}')"
+                                        class="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600">
+                                    Delete
+                                </button>
+                            </div>
+                        `);
+                    });
+                });
+            }
+
+            // Make deleteEntry function globally accessible
+            window.deleteEntry = deleteEntry;
+
+            $('#updateCamera').click(function() {
+                const newUrl = $('#cameraUrl').val();
+                if (newUrl) {
+                    stopStreaming();
+                    $.ajax({
+                        url: '/update_camera_url',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ url: newUrl }),
+                        success: function(response) {
+                            if (response.status === 'success') {
+                                $('#currentUrl').text(newUrl);
+                                alert('Camera URL updated successfully');
+                            } else {
+                                alert('Failed to update camera URL');
+                            }
+                        }
+                    });
+                }
+            });
+
+            $('#startCamera').click(function() {
+                $.get('/start_camera', function() {
+                    startStreaming();
+                });
+            });
+
+            $('#stopCamera').click(function() {
+                $.get('/stop_camera', function() {
+                    stopStreaming();
+                });
+            });
+
+            $('#capturePlate').click(function() {
+                const entryType = $('#entryTypeToggle').is(':checked') ? 'OUT' : 'IN';
+                $.get('/capture_plate', { entry_type: entryType }, function(data) {
+                    if (data.status === 'success') {
+                        alert('Plate captured: ' + data.plate_text);
+                        updateEntries();
+                    } else {
+                        alert('No plate detected');
+                    }
+                });
+            });
+
+            // Initial load of entries
+            updateEntries();
+            
+            // Update entries every 30 seconds
+            setInterval(updateEntries, 30000);
+        });
+    </script>
+</body>
+</html>
