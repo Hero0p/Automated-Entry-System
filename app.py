@@ -17,7 +17,7 @@ frame_queue = Queue(maxsize=2)
 detected_plate_queue = Queue(maxsize=2)
 camera_active = False
 reader = easyocr.Reader(['en'])
-current_camera_url = "http://192.0.0.4:8080/video"
+current_camera_url = "http://10.12.94.137:8080/video"
 last_frame_time = time.time()
 FRAME_INTERVAL = 1/30
 last_captured_plate = None
